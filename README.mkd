@@ -1,0 +1,26 @@
+Three dimension acoustic equation
+===
+The repo is calculating the acoustic spreading. The formula is 
+[here](http://en.wikipedia.org/wiki/Acoustic_wave_equation#Equation_2).
+As I am calculation the seismic wave transferring, there is a source giving 
+the sound periodically. We need to add another parameter `A`, the amplitude 
+of the sound at time t.
+
+Parameter meaning
+===
+When you reduce the formula, you need to following parameters:
+
+- c: the velocity model, for simplicity, we use the even velocity, here, 
+  3000m/s
+- dx: delta x, each step the wave move forward. Here is 200m
+- dt: the interval to catch the acoustic wave. Here is 0.002s
+- A: frequency of the wave. We can obtain it from riker wavelet equation.
+
+To cover most of the wave, you have to keep simulating for more than 33 
+iteration. Though in the real word, 2000 iteration is enough. For for 
+testing and simulation, 200 is enough.
+
+Dependancy
+===
+It need the repo of my previous written 
+[stencil](https://github.com/copico/stencil).

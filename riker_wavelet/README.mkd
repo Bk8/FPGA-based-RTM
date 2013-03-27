@@ -1,0 +1,27 @@
+Riker Wavelet
+=====
+
+The program will compute an array of the `riker wavelet` amplitude, with 
+the following formula:
+
+    A = (1 - 2 * ( PI*f*(t-1/f) )^2) * exp(-( PI*f*(t-1/f) )^2)
+
+Where 
+
+- A: is the amplitude;
+- PI: is the Math.PI, 3.14159
+- f: is the frequency of the acoustic, here, we use 15Hz
+- t: is the time, here, it is the only variable
+
+Requested Result
+=====
+Based on the above equation, we need to generate N element of A. The 
+variable `t` will begin from `0` and `t` will increase 0.002, that is 
+`delta t` is 0.002. 
+
+For N = 50, 100, 150, 200, each of amplitudes will be generated and save in 
+to a separated file named rw\_50.txt, rw\_100.txt, ...
+
+Reference
+=====
+[Ricker wavelet From SubSurfWiki](http://subsurfwiki.org/wiki/Ricker_wavelet)
