@@ -12,7 +12,8 @@ public class PassThroughKernel extends Kernel {
 	{
     super(parameters);
 
-    HWType float_t = hwFloat(11, 53);
+    //HWType float_t = hwFloat(11, 53);
+   HWType float_t = hwFloat(8, 24);
     HWType uint32_t = hwUInt(32);
 
     // Input

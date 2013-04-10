@@ -22,8 +22,8 @@ void acoustic(float *Pt, float *PtM1, float A, float *PtP1)
 {
   stencil_cpu(Pt, g_tmp, g_nz, g_ny, g_nx);
 
-  for (int i = 1; i < g_size; i++) {
+  for (int i = 0; i < g_size; i++) {
     PtP1[i] = (g_dt*g_dt) *  ( (g_c*g_c / (g_dx*g_dx)) * g_tmp[i] + A ) +
-              2 * Pt[i] - PtM1[i-1];
+              2 * Pt[i] - PtM1[i];
   }
 }

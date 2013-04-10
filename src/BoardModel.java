@@ -1,3 +1,5 @@
+package config;
+
 import com.maxeler.maxcompiler.v1.managers.MAX3BoardModel;
 
 public class BoardModel {

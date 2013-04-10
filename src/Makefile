@@ -56,7 +56,7 @@ C_SOURCES 				:=
 C_OBJS          	:= $(patsubst %.c, %.o, $(C_SOURCES))
 
 # cpp sources, separated by space
-CPP_SOURCES       := 
+CPP_SOURCES       := acoustic.cpp auxiliary.cpp global_var.cpp 
 CPP_OBJS          := $(patsubst %.cpp, %.o, $(CPP_SOURCES))
 
 CC								?= gcc
@@ -66,7 +66,7 @@ CXX								?= g++
 INCLUDE_PATH += 
 LDFLAGS+=$(MAXCOMPILER_LIBS)
 CFLAGS+=$(MAXCOMPILER_INC) $(INCLUDE_PATH) -std=gnu99 -g
-CXXFLAGS+=$(MAXCOMPILER_INC) $(INCLUDE_PATH) -g
+CXXFLAGS+=$(MAXCOMPILER_INC) $(INCLUDE_PATH) -O2
 
 # Build in the current directory if MAXCOMPILER_BUILD_DIR is not set
 ifndef MAXCOMPILER_BUILD_DIR
@@ -192,9 +192,9 @@ $(APP)SimFPGA.o:
 	$(MAXFILECOMPILE) "$(BUILD_RESULTS_SIM)/$(HOSTSIMMAXFILE)" "$@" "$(APP)"
 
 # auto select between C and CPP code
-$(basename $(HOSTCODE))Sim.o: $(HOSTCODE)
+$(basename $(HOSTCODE))Sim.o: $(HOSTCODE) $(CPP_OBJS) $(C_OBJS)
 ifeq ($(shell echo $(HOSTCODE) | sed 's/.*\.//g'), c)
-	$(CC) $(HOSTCODE) $(CFLAGS)  -DSIM -DDESIGN_NAME=$(APP) -c -o $(basename $(HOSTCODE))Sim.o
+	$(CC) $(HOSTCODE) $(CFLAGS)  -DSIM -DDESIGN_NAME=$(APP) -c -o $(basename $(HOSTCODE))Sim.o 
 else
 	$(CXX) $(HOSTCODE) $(CXXFLAGS)  -DSIM -DDESIGN_NAME=$(APP) -c -o $(basename $(HOSTCODE))Sim.o
 endif
@@ -209,15 +209,15 @@ run-sim: $(APP)SimRun
 	LD_LIBRARY_PATH="$(MAXCOMPILERDIR)/lib/maxeleros-sim/lib/:$(LD_LIBRARY_PATH)" LD_PRELOAD="libmaxeleros.so" ./$(APP)SimRun "sim0:sim"
 	$(MAXCOMPILERSIM) stop
 
-%.o: %.cpp
+%.o: %.cpp %.h
 	$(CXX) -c $(CXXFLAGS) -o $@ $<
 
-%.o: %.c
+%.o: %.c %.h
 	$(CC) -c $(CFLAGS)  -o $@ $<
 
 ################## Clean ################
 
 clean::
 	-$(MAXCOMPILERSIM) stop
-	-rm -rf *.o $(APP)SimRun $(APP)Run watch_*.bin watch_*.csv core.*
+	-rm -rf *.o $(CPP_OBJS) $(C_OBJS) $(APP)SimRun $(APP)Run watch_*.bin watch_*.csv core.*
 

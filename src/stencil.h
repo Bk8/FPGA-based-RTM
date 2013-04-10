@@ -4,13 +4,18 @@
 
 #include "auxiliary.h"
 
-static const float c1 = 1.0/90.;
-static const float c2 = -3.0/20;
-static const float c3 = 1.5;
-static const float c4 = -49.0/18;
-static const float c5 = 1.5;
-static const float c6 = -3.0/20;
-static const float c7 = 1.0/90.0;
+const float c1 = 1.0/90.;
+const float c2 = -3.0/20;
+const float c3 = 1.5;
+const float c4 = -49.0/18;
+const float c5 = 1.5;
+const float c6 = -3.0/20;
+const float c7 = 1.0/90.0;
+
+const float w3 = c1;
+const float w2 = c2;
+const float w1 = c3;
+const float w0 = c4;
 
 template <typename T>
 T stencil(
@@ -65,7 +70,8 @@ void stencil_cpu(
                     out[at(height,row,col, nRow, nCol)] =
                         stencil(in, height, row, col, nRow, nCol);
                 } else {
-                    out[at(height,row,col, nRow, nCol)] = 0;
+                    out[at(height,row,col, nRow, nCol)] =
+                      in[at(height, row, col, nRow, nCol)];
                 }
             }
         }
