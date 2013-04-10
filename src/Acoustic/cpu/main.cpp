@@ -9,7 +9,7 @@
 
 #include "global_var.h"
 #include "acoustic.h"
-#include "../stencil/sysTime.h"
+#include "sysTime.h"
 #include <iostream>
 #include <fstream>
 #include <cstdlib>
