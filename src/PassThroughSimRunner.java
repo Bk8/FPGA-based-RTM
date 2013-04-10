@@ -7,10 +7,10 @@ public class PassThroughSimRunner
 {
   private static final double epsilon = 1e-10;
   private static final int nxMax = 512;
-  private static final int dimension = 7;
-  private final static int nx = dimension;
-  private final static int ny = dimension;
-  private final static int nz = dimension;
+  public static final int dimension = 32;
+  public final static int nx = dimension;
+  public final static int ny = dimension;
+  public final static int nz = dimension;
   private final static double w3 = (1.0 / 90.);
   private final static double w2 = (-3.0 / 20);
   private final static double w1 = 1.5;
@@ -21,7 +21,7 @@ public class PassThroughSimRunner
   private final static double g_dx = 200;
   private final static double A = 10;
 
-  private final static int n_iter = 1;
+  private final static int n_iter = 5;
 
   private static double[] Pt_fpga = new double[nx * ny * nz];
   private static double[] PtM1_fpga = new double[nx * ny * nz];
@@ -32,6 +32,8 @@ public class PassThroughSimRunner
   private static double[] PtP1 = new double[nx * ny * nz];
   private static double[] tmp = new double[nx * ny * nz];
 
+  private static double[] original = new double[nx * ny * nz];
+
   public static void main(String[] args)
   {
 
@@ -39,11 +41,11 @@ public class PassThroughSimRunner
     // run in Java
     for (int i = 0; i < n_iter; i++) {
       acoustic(Pt, PtM1, A, PtP1);
+      double [] tmp = PtM1;
       PtM1 = Pt;
       Pt = PtP1;
-    }
+      PtP1 = tmp;
 
-    for (int i = 0; i < n_iter; i++) {
       SimulationManager m = new SimulationManager("PassThroughSim");
       Kernel k = new PassThroughKernel(m.makeKernelParameters(), nxMax,
           nx, ny, nz);
@@ -77,11 +79,17 @@ public class PassThroughSimRunner
 
       PtM1_fpga = Pt_fpga;
       Pt_fpga = PtP1_fpga;
+
+      // check output
+      System.out.println("For the " + i + " iteration");
+      if (verifyAll(Pt_fpga, Pt)) {
+        System.out.println("Test Pass!!!");
+      } else {
+        System.out.println("It is so sorry that the test Failed!!!!!!!!");
+      }
     }
 
-    // check output
-
-    if (verifyAll(Pt_fpga, Pt)) {
+    if (verifyAll(Pt_fpga, Pt) && !verifyAll(Pt, original)) {
       System.out.println("Test Pass!!!");
     } else {
       System.out.println("It is so sorry that the test Failed!!!!!!!!");
@@ -92,11 +100,13 @@ public class PassThroughSimRunner
   private static void acoustic(double[] Pt, double[] PtM1, double A,
       double[] PtP1)
   {
-    tmp = stencil_cpu(Pt, tmp);
+    tmp = stencil_boundary_unchanged(Pt, tmp);
     for (int i = 0; i < nx * ny * nz; i++) {
-      PtP1[i] = (g_dt * g_dt) * ((g_c * g_c / (g_dx * g_dx)) * tmp[i] + A) + 2
-        * Pt[i] - PtM1[i];
+      PtP1[i] = (g_dt*g_dt) * ((g_c*g_c / (g_dx*g_dx)) * tmp[i]+A) + 2*Pt[i] - PtM1[i];
+//      PtP1[i] = tmp[i]; // for the test of stencil
     }
+
+
   }
 
   private static boolean verify(double[] in, double[] out)
@@ -108,8 +118,7 @@ public class PassThroughSimRunner
         for (int ix = 3; ix < nx - 3; ix++) {
           int index = at(iz, iy, ix);
           if (Math.abs(in[index] - out[index]) > epsilon) {
-            System.out.printf("%d,%d,%d)\t%f\t%f\n", iz, iy, ix, in[index],
-                out[index]);
+//            System.out.printf("%d,%d,%d)\t%f\t%f\n", iz, iy, ix, in[index], out[index]);
             ret = false;
           }
         }
@@ -127,7 +136,7 @@ public class PassThroughSimRunner
         int z = i / (nx * ny);
         int y = (i - z *nx*ny) / nx;
         int x = (i - z * ny * ny - y * nx);
-        System.out.printf("%d: (%d,%d,%d):\t\t%f\t\t%f\n", i, z, y, x, a[i], b[i]);
+//        System.out.printf("%d: (%d,%d,%d):\t\t%f\t\t%f\n", i, z, y, x, a[i], b[i]);
         ret = false;
       }
     }
@@ -142,6 +151,7 @@ public class PassThroughSimRunner
       PtM1[i] = r.nextInt(1000000);
       Pt_fpga[i] = Pt[i];
       PtM1_fpga[i] = PtM1[i];
+      original[i] = Pt[i];
     }
   }
 
@@ -151,6 +161,27 @@ public class PassThroughSimRunner
       for (int iy = 0; iy < ny; iy++) {
         for (int ix = 0; ix < nx; ix++) {
           out[at(iz, iy, ix)] = stencil(in, iz, iy, ix);
+        }
+      }
+    }
+
+    return out;
+  }
+
+  private static double [] stencil_boundary_unchanged(double [] in, double [] out)
+  {
+    for (int iz = 0; iz < nz; iz++) {
+      for (int iy = 0; iy < ny; iy++) {
+        for (int ix = 0; ix < nx; ix++) {
+          if (iz >= 3 && iz < nx - 3 &&
+              iy >= 3 && iy < ny - 3 &&
+              ix >= 3 && ix < nx - 3) {
+            // in the middle of the grid
+            out[at(iz,iy,ix)] = stencil_plain(in, iz, iy, ix);
+          } else {
+            // at the boundary
+            out[at(iz,iy,ix)] = in[at(iz,iy,ix)];
+          }
         }
       }
     }
@@ -197,6 +228,24 @@ public class PassThroughSimRunner
       (zM3 + zP3) * w3 +
       (zM2 + zP2) * w2 +
       (zM1 + zP1) * w1 +
+
+      (in[at(iz, iy, ix)] * w0) * 3;
+  }
+
+  private static double stencil_plain(double [] in, int iz, int iy, int ix)
+  {
+    return
+      (in[at(iz, iy, ix - 3)] + in[at(iz, iy, ix + 3)]) * w3 +
+      (in[at(iz, iy, ix - 2)] + in[at(iz, iy, ix + 2)]) * w2 +
+      (in[at(iz, iy, ix - 1)] + in[at(iz, iy, ix + 1)]) * w1 +
+
+      (in[at(iz, iy - 3, ix)] + in[at(iz, iy + 3, ix)]) * w3 +
+      (in[at(iz, iy - 2, ix)] + in[at(iz, iy + 2, ix)]) * w2 +
+      (in[at(iz, iy - 1, ix)] + in[at(iz, iy + 1, ix)]) * w1 +
+
+      (in[at(iz - 3, iy, ix)] + in[at(iz + 3, iy, ix)]) * w3 +
+      (in[at(iz - 2, iy, ix)] + in[at(iz + 2, iy, ix)]) * w2 +
+      (in[at(iz - 1, iy, ix)] + in[at(iz + 1, iy, ix)]) * w1 +
 
       (in[at(iz, iy, ix)] * w0) * 3;
   }

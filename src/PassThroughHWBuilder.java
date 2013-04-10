@@ -7,7 +7,10 @@ public class PassThroughHWBuilder {
 
 	public static void main(String[] args) {
 		Manager m = new Manager("PassThrough", BoardModel.BOARDMODEL);
-		Kernel k = new PassThroughKernel( m.makeKernelParameters(), nxMax);
+		Kernel k = new PassThroughKernel( m.makeKernelParameters(), nxMax,
+		    PassThroughSimRunner.nx,
+		    PassThroughSimRunner.ny,
+		    PassThroughSimRunner.nz);
 
 		m.setKernel(k);
 
