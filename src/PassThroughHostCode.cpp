@@ -11,12 +11,14 @@
 #include "sysTime.h"
 
 using namespace std;
+void runAndCheck(max_device_handle_t *device, float **Pt_array, float **Pt_fpga_array, float *source, float **receivers, float **receivers_fpga, size_t size, int n_iter);
 void get_amplitude(float *A, int n);
 bool passVerify(float *a, float *b, size_t size);
 void allocArray(float **Pt_array, float **Pt_fpga_array, float **receivers, float **receivers_fpga, size_t nt, size_t n_elem);
 void deleteArray(float **Pt_array, float **Pt_fpga_array, float **receivers, float **receivers_fpga, size_t size);
 void stream2FPGA(max_device_handle_t *device);
-void runAndCheck(max_device_handle_t *device, float **Pt_array, float **Pt_fpga_array, float *source, float **receivers, float **receivers_fpga, size_t size, int n_iter);
+void forwardMigrationAndCheck(max_device_handle_t *device, float **Pt_array, float **Pt_fpga_array, float *source, float **receivers, float **receivers_fpga, size_t size, int n_iter);
+void reverseMigrationAndCheck(max_device_handle_t *device, float **Pt_array, float **Pt_fpga_array, float **receivers, float **receivers_fpga, float *image, float *image_fpga, size_t size, int n_iter);
 void initFPGA(max_maxfile_t **maxfile, max_device_handle_t **device, const char *device_name);
 
 int main(int argc, char* argv[])
@@ -29,18 +31,26 @@ int main(int argc, char* argv[])
   float               source[g_nt];
   float               *receivers[g_nx *g_ny];
   float               *receivers_fpga[g_ny * g_ny];
+  float               image[g_size] = {0};
+  float               image_fpga[g_size] = {0};
 
   cout << "Opening and configuring FPGA." << endl;
   initFPGA(&maxfile, &device, device_name);
 
-  allocArray(Pt_array, Pt_fpga_array, receivers, receivers_fpga, g_nt + 2, g_size);
+  allocArray(Pt_array, Pt_fpga_array, receivers, receivers_fpga, g_nt, g_size);
   get_amplitude(source, g_nt);
 
   cout << "Streaming data to/from FPGA." << endl;
   stream2FPGA(device);
 
   cout << "Begin to execute function: max_run" << endl;
-  runAndCheck(device, Pt_array, Pt_fpga_array, source, receivers, receivers_fpga, g_size, g_nt);
+  forwardMigrationAndCheck(device, Pt_array, Pt_fpga_array, source, receivers, receivers_fpga, g_size, g_nt);
+
+  cout << "Begin to Reverse Migration" << endl;
+  reverseMigrationAndCheck(device, Pt_array, Pt_fpga_array, 
+                           receivers, receivers_fpga,
+                           image, image_fpga,
+                           g_size, g_nt);
 
   cout << "Shutting down" << endl;
   max_close_device(device);
@@ -117,6 +127,7 @@ void deleteArray(float **Pt_array, float **Pt_fpga_array,
     delete [] receivers[i];
     delete [] receivers_fpga[i];
   }
+
   for (size_t i = 0; i < size; i++) {
     delete [] Pt_array[i];
     delete [] Pt_fpga_array[i];
@@ -141,7 +152,7 @@ void stream2FPGA(max_device_handle_t *device)
   max_upload_runtime_params(device, FPGA_A);
 }
 
-void runAndCheck(max_device_handle_t *device, 
+void forwardMigrationAndCheck(max_device_handle_t *device, 
                  float **Pt_array, float **Pt_fpga_array, 
                  float *source, 
                  float **receivers, float **receivers_fpga,
@@ -149,7 +160,7 @@ void runAndCheck(max_device_handle_t *device,
 {
   size_t n_bytes = size * sizeof(float);
   for (int i = 1; i < n_iter + 1; i++) {
-    cout << i - 1 << "st run" << endl;
+    cout << i - 1 << "st run: ";
 
     // run with FPGA
     max_run(device,
@@ -163,8 +174,8 @@ void runAndCheck(max_device_handle_t *device,
     acoustic(Pt_array[i], Pt_array[i-1], Pt_array[i+1]);
 
     // add source injection
-    Pt_array[i][at(0, g_ny/2, g_nx/2, g_ny, g_nx)]      += source[i-1];
-    Pt_fpga_array[i][at(0, g_ny/2, g_nx/2, g_ny, g_nx)] += source[i-1];
+    Pt_array[i+1][at(0, g_ny/2, g_nx/2, g_ny, g_nx)]      += source[i-1];
+    Pt_fpga_array[i+1][at(0, g_ny/2, g_nx/2, g_ny, g_nx)] += source[i-1];
 
     // record receivers 
     for (size_t irecv = 0; irecv < g_nx * g_ny; irecv++) {
@@ -178,6 +189,53 @@ void runAndCheck(max_device_handle_t *device,
   }
 }
 
+void reverseMigrationAndCheck(max_device_handle_t *device, 
+                 float **Pt_array, float **Pt_fpga_array, 
+                 float **receivers, float **receivers_fpga,
+                 float *image, float *image_fpga,
+                 size_t size, int n_iter)
+{
+  float Pt[g_size]        = {0};
+  float PtM1[g_size]      = {0};
+  float PtP1[g_size]      = {0};
+  float Pt_fpga[g_size]   = {0};
+  float PtM1_fpga[g_size] = {0};
+  float PtP1_fpga[g_size] = {0};
+
+  size_t n_bytes = size * sizeof(float);
+  for (int i = n_iter; i >= 1; i--) {
+    cout << i - 1 << "st run: ";
+
+    // run with FPGA
+    max_run(device,
+        max_input("Pt_stream", Pt_fpga, n_bytes),
+        max_input("PtM1_stream", PtP1_fpga, n_bytes),
+        max_output("PtP1_stream", PtM1_fpga, n_bytes),
+        max_runfor("PassThroughKernel", size),
+        max_end());
+
+    // run with CPU
+    acoustic(Pt, PtP1, PtM1);
+
+    // add receivers injection
+    // where you collect the receivers's wave then
+    // where you add the injection
+    for (size_t irecv = 0; irecv < g_nx * g_ny; irecv++) {
+      PtM1[irecv]      += receivers[irecv][i];
+      PtM1_fpga[irecv] += receivers_fpga[irecv][i];
+    }
+
+    // generate the image
+    for (int j = 0; j < g_size; j++) {
+      image[j] += Pt_array[i-1][j] * PtM1[j];
+      image_fpga[j] += Pt_fpga_array[i-1][j] * PtM1_fpga[j];
+    }
+
+    cout << (passVerify(Pt_array[i-1], Pt_fpga_array[i-1], size) ? 
+             "OK. Test passed" : "!!!Test Failed!!!")
+         << endl << endl;
+  }
+}
 void initFPGA(max_maxfile_t **maxfile, max_device_handle_t **device, 
               const char *device_name)
 {
