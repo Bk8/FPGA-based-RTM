@@ -1,0 +1,6 @@
+bin/*
+PassThroughHostSim/*
+PassThroughSim/*
+hardware/*
+*.o
+cpu/*

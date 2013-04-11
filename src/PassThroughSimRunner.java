@@ -41,14 +41,14 @@ public class PassThroughSimRunner
     // run in Java
     for (int i = 0; i < n_iter; i++) {
       acoustic(Pt, PtM1, A, PtP1);
-      double [] tmp = PtM1;
+      double[] tmp = PtM1;
       PtM1 = Pt;
       Pt = PtP1;
       PtP1 = tmp;
 
       SimulationManager m = new SimulationManager("PassThroughSim");
       Kernel k = new PassThroughKernel(m.makeKernelParameters(), nxMax,
-          nx, ny, nz);
+          new FloatingPointParam(11, 53));
 
       // run in FPGA
       m.setKernel(k);
@@ -58,9 +58,9 @@ public class PassThroughSimRunner
       m.setStreamOffsetParam("nxy_offset", nx * ny);
 
       // set scalar input
-      //      m.setScalarInput("nx", nx);
-      //      m.setScalarInput("ny", ny);
-      //      m.setScalarInput("nz", nz);
+      m.setScalarInput("xMax", nx);
+      m.setScalarInput("yMax", ny);
+      m.setScalarInput("zMax", nz);
       m.setScalarInput("w3", w3);
       m.setScalarInput("w2", w2);
       m.setScalarInput("w1", w1);
@@ -102,10 +102,10 @@ public class PassThroughSimRunner
   {
     tmp = stencil_boundary_unchanged(Pt, tmp);
     for (int i = 0; i < nx * ny * nz; i++) {
-      PtP1[i] = (g_dt*g_dt) * ((g_c*g_c / (g_dx*g_dx)) * tmp[i]+A) + 2*Pt[i] - PtM1[i];
-//      PtP1[i] = tmp[i]; // for the test of stencil
+      PtP1[i] = (g_dt * g_dt) * ((g_c * g_c / (g_dx * g_dx)) * tmp[i] + A) + 2
+          * Pt[i] - PtM1[i];
+      // PtP1[i] = tmp[i]; // for the test of stencil
     }
-
 
   }
 
@@ -118,7 +118,8 @@ public class PassThroughSimRunner
         for (int ix = 3; ix < nx - 3; ix++) {
           int index = at(iz, iy, ix);
           if (Math.abs(in[index] - out[index]) > epsilon) {
-//            System.out.printf("%d,%d,%d)\t%f\t%f\n", iz, iy, ix, in[index], out[index]);
+            // System.out.printf("%d,%d,%d)\t%f\t%f\n", iz, iy, ix, in[index],
+            // out[index]);
             ret = false;
           }
         }
@@ -127,16 +128,17 @@ public class PassThroughSimRunner
     return ret;
   }
 
-  private static boolean verifyAll(double [] a, double [] b)
+  private static boolean verifyAll(double[] a, double[] b)
   {
     boolean ret = true;
     System.out.println("i:\t\toutput\t\t\texpected");
     for (int i = 0; i < nx * ny * nz; i++) {
       if (Math.abs(a[i] - b[i]) > epsilon) {
         int z = i / (nx * ny);
-        int y = (i - z *nx*ny) / nx;
+        int y = (i - z * nx * ny) / nx;
         int x = (i - z * ny * ny - y * nx);
-//        System.out.printf("%d: (%d,%d,%d):\t\t%f\t\t%f\n", i, z, y, x, a[i], b[i]);
+        // System.out.printf("%d: (%d,%d,%d):\t\t%f\t\t%f\n", i, z, y, x, a[i],
+        // b[i]);
         ret = false;
       }
     }
@@ -168,19 +170,18 @@ public class PassThroughSimRunner
     return out;
   }
 
-  private static double [] stencil_boundary_unchanged(double [] in, double [] out)
+  private static double[] stencil_boundary_unchanged(double[] in, double[] out)
   {
     for (int iz = 0; iz < nz; iz++) {
       for (int iy = 0; iy < ny; iy++) {
         for (int ix = 0; ix < nx; ix++) {
-          if (iz >= 3 && iz < nx - 3 &&
-              iy >= 3 && iy < ny - 3 &&
-              ix >= 3 && ix < nx - 3) {
+          if (iz >= 3 && iz < nx - 3 && iy >= 3 && iy < ny - 3 && ix >= 3
+              && ix < nx - 3) {
             // in the middle of the grid
-            out[at(iz,iy,ix)] = stencil_plain(in, iz, iy, ix);
+            out[at(iz, iy, ix)] = stencil_plain(in, iz, iy, ix);
           } else {
             // at the boundary
-            out[at(iz,iy,ix)] = in[at(iz,iy,ix)];
+            out[at(iz, iy, ix)] = in[at(iz, iy, ix)];
           }
         }
       }
@@ -216,37 +217,29 @@ public class PassThroughSimRunner
     double zP2 = (iz + 2 > nz - 1 ? 0 : in[at(iz + 2, iy, ix)]);
     double zP1 = (iz + 1 > nz - 1 ? 0 : in[at(iz + 1, iy, ix)]);
 
-    return
-      (xM3 + xP3) * w3 +
-      (xM2 + xP2) * w2 +
-      (xM1 + xP1) * w1 +
+    return (xM3 + xP3) * w3 + (xM2 + xP2) * w2 + (xM1 + xP1) * w1 +
 
-      (yM3 + yP3) * w3 +
-      (yM2 + yP2) * w2 +
-      (yM1 + yP1) * w1 +
+    (yM3 + yP3) * w3 + (yM2 + yP2) * w2 + (yM1 + yP1) * w1 +
 
-      (zM3 + zP3) * w3 +
-      (zM2 + zP2) * w2 +
-      (zM1 + zP1) * w1 +
+    (zM3 + zP3) * w3 + (zM2 + zP2) * w2 + (zM1 + zP1) * w1 +
 
-      (in[at(iz, iy, ix)] * w0) * 3;
+    (in[at(iz, iy, ix)] * w0) * 3;
   }
 
-  private static double stencil_plain(double [] in, int iz, int iy, int ix)
+  private static double stencil_plain(double[] in, int iz, int iy, int ix)
   {
-    return
-      (in[at(iz, iy, ix - 3)] + in[at(iz, iy, ix + 3)]) * w3 +
-      (in[at(iz, iy, ix - 2)] + in[at(iz, iy, ix + 2)]) * w2 +
-      (in[at(iz, iy, ix - 1)] + in[at(iz, iy, ix + 1)]) * w1 +
+    return (in[at(iz, iy, ix - 3)] + in[at(iz, iy, ix + 3)]) * w3
+        + (in[at(iz, iy, ix - 2)] + in[at(iz, iy, ix + 2)]) * w2
+        + (in[at(iz, iy, ix - 1)] + in[at(iz, iy, ix + 1)]) * w1 +
 
-      (in[at(iz, iy - 3, ix)] + in[at(iz, iy + 3, ix)]) * w3 +
-      (in[at(iz, iy - 2, ix)] + in[at(iz, iy + 2, ix)]) * w2 +
-      (in[at(iz, iy - 1, ix)] + in[at(iz, iy + 1, ix)]) * w1 +
+        (in[at(iz, iy - 3, ix)] + in[at(iz, iy + 3, ix)]) * w3
+        + (in[at(iz, iy - 2, ix)] + in[at(iz, iy + 2, ix)]) * w2
+        + (in[at(iz, iy - 1, ix)] + in[at(iz, iy + 1, ix)]) * w1 +
 
-      (in[at(iz - 3, iy, ix)] + in[at(iz + 3, iy, ix)]) * w3 +
-      (in[at(iz - 2, iy, ix)] + in[at(iz + 2, iy, ix)]) * w2 +
-      (in[at(iz - 1, iy, ix)] + in[at(iz + 1, iy, ix)]) * w1 +
+        (in[at(iz - 3, iy, ix)] + in[at(iz + 3, iy, ix)]) * w3
+        + (in[at(iz - 2, iy, ix)] + in[at(iz + 2, iy, ix)]) * w2
+        + (in[at(iz - 1, iy, ix)] + in[at(iz + 1, iy, ix)]) * w1 +
 
-      (in[at(iz, iy, ix)] * w0) * 3;
+        (in[at(iz, iy, ix)] * w0) * 3;
   }
 }

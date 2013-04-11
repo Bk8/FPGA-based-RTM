@@ -20,7 +20,7 @@ nullstring :=
 space := $(nullstring) # comment
 MAXCOMPILERDIR_QUOTE:=$(subst $(space),\ ,$(MAXCOMPILERDIR))
 
-compile : java-sim
+compile : run-sim
 ifndef MAXCOMPILERDIR
 	$(error MAXCOMPILERDIR environment variable is not set)
 endif
@@ -56,7 +56,7 @@ C_SOURCES 				:=
 C_OBJS          	:= $(patsubst %.c, %.o, $(C_SOURCES))
 
 # cpp sources, separated by space
-CPP_SOURCES       := acoustic.cpp auxiliary.cpp global_var.cpp 
+CPP_SOURCES       := auxiliary.cpp global_var.cpp 
 CPP_OBJS          := $(patsubst %.cpp, %.o, $(CPP_SOURCES))
 
 CC								?= gcc
@@ -66,7 +66,7 @@ CXX								?= g++
 INCLUDE_PATH += 
 LDFLAGS+=$(MAXCOMPILER_LIBS)
 CFLAGS+=$(MAXCOMPILER_INC) $(INCLUDE_PATH) -std=gnu99 -g
-CXXFLAGS+=$(MAXCOMPILER_INC) $(INCLUDE_PATH) -O2
+CXXFLAGS+=$(MAXCOMPILER_INC) $(INCLUDE_PATH) 
 
 # Build in the current directory if MAXCOMPILER_BUILD_DIR is not set
 ifndef MAXCOMPILER_BUILD_DIR
@@ -221,3 +221,6 @@ clean::
 	-$(MAXCOMPILERSIM) stop
 	-rm -rf *.o $(CPP_OBJS) $(C_OBJS) $(APP)SimRun $(APP)Run watch_*.bin watch_*.csv core.*
 
+clean-all :
+	make clean
+	make clean-maxfiles

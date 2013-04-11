@@ -7,6 +7,7 @@
 #include "global_var.h"
 #include "acoustic.h"
 #include "stencil.h"
+#include "sysTime.h"
 
 using namespace std;
 void get_amplitude(float *A, int n);
@@ -38,8 +39,10 @@ int main(int argc, char* argv[])
 
   // init array
   for (int i = 0; i < g_size; i++) {
-    Pt[i] = Pt_fpga[i] = (float)rand() / 100000;
-    PtM1[i] = PtM1_fpga[i] = (float)rand() / 100000;
+    //Pt[i] = Pt_fpga[i] = (float)rand() / 100000;
+    //PtM1[i] = PtM1_fpga[i] = (float)rand() / 100000;
+    Pt[i] = Pt_fpga[i] = 0;
+    PtM1[i] = PtM1_fpga[i] = 0;
   }
 
   cout << "Streaming data to/from FPGA." << endl;
@@ -50,23 +53,30 @@ int main(int argc, char* argv[])
   max_set_scalar_input_f(device, "PassThroughKernel.dt", g_dt, FPGA_A);
   max_set_scalar_input_f(device, "PassThroughKernel.c",  g_c, FPGA_A);
   max_set_scalar_input_f(device, "PassThroughKernel.dx", g_dx, FPGA_A);
+  max_set_scalar_input_f(device, "PassThroughKernel.xMax", g_nx, FPGA_A);
+  max_set_scalar_input_f(device, "PassThroughKernel.yMax", g_ny, FPGA_A);
+  max_set_scalar_input_f(device, "PassThroughKernel.zMax", g_nz, FPGA_A);
 
   max_set_runtime_param(device, "PassThroughKernel.nx_offset", g_nx);
   max_set_runtime_param(device, "PassThroughKernel.nxy_offset", g_nx * g_ny);
   max_upload_runtime_params(device, FPGA_A);
 
   cout << "Begin to execute function: max_run" << endl;
+  size_t n_bytes = g_size * sizeof *Pt;
   for (int i = 0; i < g_niter; i++) {
     cout << i + 1 << "st run" << endl;
-    max_set_scalar_input_f(device, "PassThroughKernel.A",  A[i], FPGA_A);
+
     max_run(device,
-        max_input("Pt_stream", Pt_fpga, g_size * sizeof *Pt),
-        max_input("PtM1_stream", PtM1_fpga, g_size * sizeof *PtM1),
-        max_output("PtP1_stream", PtP1_fpga, g_size * sizeof *PtP1),
+        max_input("Pt_stream", Pt_fpga, n_bytes),
+        max_input("PtM1_stream", PtM1_fpga, n_bytes),
+        max_output("PtP1_stream", PtP1_fpga, n_bytes),
         max_runfor("PassThroughKernel", g_size),
         max_end());
 
-    acoustic(Pt, PtM1, A[i], PtP1);
+    acoustic(Pt, PtM1, PtP1);
+
+    PtP1[at(0, g_ny/2, g_nx/2, g_ny, g_nx)]      += A[i];
+    PtP1_fpga[at(0, g_ny/2, g_nx/2, g_ny, g_nx)] += A[i];
 
     // swap the pointers of host
     float *tmp = PtM1;
@@ -81,9 +91,9 @@ int main(int argc, char* argv[])
     PtP1_fpga = tmp;
 
     printf("Checking data read from FPGA.\n");
-    float epsilon = 1e-10;
+    float epsilon = 1e-23;
     for(int j = 0; j < g_size; j++) {
-      if (abs(PtP1[j] - PtP1_fpga[j]) > epsilon) {
+      if ((abs(PtP1[j] - PtP1_fpga[j])) / abs(PtP1[j]) > epsilon) {
         status = 1;
         printf("%10d%20f%20f\n", j, PtP1[j], PtP1_fpga[j]);
         //break;

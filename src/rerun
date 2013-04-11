@@ -1,0 +1,5 @@
+#!/bin/bash
+
+# vim: ft=sh
+
+make clean-all && make build-sim && make

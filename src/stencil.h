@@ -4,53 +4,70 @@
 
 #include "auxiliary.h"
 
-const float c1 = 1.0/90.;
-const float c2 = -3.0/20;
-const float c3 = 1.5;
-const float c4 = -49.0/18;
-const float c5 = 1.5;
-const float c6 = -3.0/20;
-const float c7 = 1.0/90.0;
-
-const float w3 = c1;
-const float w2 = c2;
-const float w1 = c3;
-const float w0 = c4;
+const float w3 = 1.0/90.0;
+const float w2 = -3.0/20;
+const float w1 = 1.5;
+const float w0 = -49.0/18;
 
 template <typename T>
 T stencil(
-  const T *a,
-  size_t   height,
-  size_t   row,
-  size_t   col,
-  size_t   nRow,
-  size_t   nCol)
+    const T *in,
+    size_t iz,
+    size_t iy,
+    size_t ix,
+    size_t ny,
+    size_t nx)
 {
-    return
-        a[at( height     , row     , col - 3 ,nRow , nCol)] * c1 +
-        a[at( height     , row     , col - 2 ,nRow , nCol)] * c2 +
-        a[at( height     , row     , col - 1 ,nRow , nCol)] * c3 +
-        a[at( height     , row     , col     ,nRow , nCol)] * c4 +
-        a[at( height     , row     , col + 1 ,nRow , nCol)] * c5 +
-        a[at( height     , row     , col + 2 ,nRow , nCol)] * c6 +
-        a[at( height     , row     , col + 3 ,nRow , nCol)] * c7 +
+  return
+      (in[at(iz, iy, ix - 3, ny, nx)] + in[at(iz, iy, ix + 3, ny, nx)]) * w3 +
+      (in[at(iz, iy, ix - 2, ny, nx)] + in[at(iz, iy, ix + 2, ny, nx)]) * w2 +
+      (in[at(iz, iy, ix - 1, ny, nx)] + in[at(iz, iy, ix + 1, ny, nx)]) * w1 +
 
-        a[at( height     , row - 3 , col     ,nRow , nCol)] * c1 +
-        a[at( height     , row - 2 , col     ,nRow , nCol)] * c2 +
-        a[at( height     , row - 1 , col     ,nRow , nCol)] * c3 +
-        a[at( height     , row     , col     ,nRow , nCol)] * c4 +
-        a[at( height     , row + 1 , col     ,nRow , nCol)] * c5 +
-        a[at( height     , row + 2 , col     ,nRow , nCol)] * c6 +
-        a[at( height     , row + 3 , col     ,nRow , nCol)] * c7 +
+      (in[at(iz, iy - 3, ix, ny, nx)] + in[at(iz, iy + 3, ix, ny, nx)]) * w3 +
+      (in[at(iz, iy - 2, ix, ny, nx)] + in[at(iz, iy + 2, ix, ny, nx)]) * w2 +
+      (in[at(iz, iy - 1, ix, ny, nx)] + in[at(iz, iy + 1, ix, ny, nx)]) * w1 +
 
-        a[at( height - 3 , row     , col     ,nRow , nCol)] * c1 +
-        a[at( height - 2 , row     , col     ,nRow , nCol)] * c2 +
-        a[at( height - 1 , row     , col     ,nRow , nCol)] * c3 +
-        a[at( height     , row     , col     ,nRow , nCol)] * c4 +
-        a[at( height + 1 , row     , col     ,nRow , nCol)] * c5 +
-        a[at( height + 2 , row     , col     ,nRow , nCol)] * c6 +
-        a[at( height + 3 , row     , col     ,nRow , nCol)] * c7 ;
+      (in[at(iz - 3, iy, ix, ny, nx)] + in[at(iz + 3, iy, ix, ny, nx)]) * w3 +
+      (in[at(iz - 2, iy, ix, ny, nx)] + in[at(iz + 2, iy, ix, ny, nx)]) * w2 +
+      (in[at(iz - 1, iy, ix, ny, nx)] + in[at(iz + 1, iy, ix, ny, nx)]) * w1 +
+
+      (in[at(iz, iy, ix, ny, nx)] * w0) * 3;
+
 }
+//template <typename T>
+//T stencil(
+  //const T *a,
+  //size_t   height,
+  //size_t   row,
+  //size_t   col,
+  //size_t   nRow,
+  //size_t   nCol)
+//{
+    //return
+        //a[at( height     , row     , col - 3 ,nRow , nCol)] * c1 +
+        //a[at( height     , row     , col - 2 ,nRow , nCol)] * c2 +
+        //a[at( height     , row     , col - 1 ,nRow , nCol)] * c3 +
+        //a[at( height     , row     , col     ,nRow , nCol)] * c4 +
+        //a[at( height     , row     , col + 1 ,nRow , nCol)] * c5 +
+        //a[at( height     , row     , col + 2 ,nRow , nCol)] * c6 +
+        //a[at( height     , row     , col + 3 ,nRow , nCol)] * c7 +
+
+        //a[at( height     , row - 3 , col     ,nRow , nCol)] * c1 +
+        //a[at( height     , row - 2 , col     ,nRow , nCol)] * c2 +
+        //a[at( height     , row - 1 , col     ,nRow , nCol)] * c3 +
+        //a[at( height     , row     , col     ,nRow , nCol)] * c4 +
+        //a[at( height     , row + 1 , col     ,nRow , nCol)] * c5 +
+        //a[at( height     , row + 2 , col     ,nRow , nCol)] * c6 +
+        //a[at( height     , row + 3 , col     ,nRow , nCol)] * c7 +
+
+        //a[at( height - 3 , row     , col     ,nRow , nCol)] * c1 +
+        //a[at( height - 2 , row     , col     ,nRow , nCol)] * c2 +
+        //a[at( height - 1 , row     , col     ,nRow , nCol)] * c3 +
+        //a[at( height     , row     , col     ,nRow , nCol)] * c4 +
+        //a[at( height + 1 , row     , col     ,nRow , nCol)] * c5 +
+        //a[at( height + 2 , row     , col     ,nRow , nCol)] * c6 +
+        //a[at( height + 3 , row     , col     ,nRow , nCol)] * c7 ;
+//}
 
 template <typename T>
 void stencil_cpu(
