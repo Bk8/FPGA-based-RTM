@@ -78,7 +78,8 @@ endif
 BUILD_RESULTS=`$(MAXGUESSBUILDDIR) -s $(basename $(HWMAXFILE))`results
 BUILD_RESULTS_SIM=`$(MAXGUESSBUILDDIR) -s $(basename $(HOSTSIMMAXFILE))`results
 
-BOARD_MODEL:=`java -cp $(BASEDIR)/bin:$(MAXCOMPILERDIR_QUOTE)/lib/MaxCompiler.jar config.BoardModel`
+#BOARD_MODEL:=`java -cp $(BASEDIR)/bin:$(MAXCOMPILERDIR_QUOTE)/lib/MaxCompiler.jar config.BoardModel`
+BOARD_MODEL:= MAX3424A
 
 .PHONY: all clean app app-sim run run-sim javasim javacompile build-sim build-hw $(APP)SimFPGA.o $(APP)FPGA.o
 

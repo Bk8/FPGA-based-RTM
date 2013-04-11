@@ -26,23 +26,28 @@ int main(int argc, char* argv[])
   max_set_terminate_on_error(device);
 
   cout << "Generating data to send to FPGA." << endl;
-  float *Pt        = new float[g_size];
-  float *PtM1      = new float[g_size];
-  float *PtP1      = new float[g_size];
-  float *Pt_fpga   = new float[g_size];
-  float *PtM1_fpga = new float[g_size];
-  float *PtP1_fpga = new float[g_size];
-  float *A         = new float[g_niter];
+  float *Pt_array[g_niter + 2];
+  float *Pt_fpga_array[g_niter + 2];
 
-  //float A = 100;
+  for (int i = 0; i < g_niter + 2; i++) {
+    Pt_array[i] = new float[g_size];
+    Pt_fpga_array[i] = new float[g_size];
+  }
+  //float *Pt        = new float[g_size];
+  //float *PtM1      = new float[g_size];
+  //float *PtP1      = new float[g_size];
+  //float *Pt_fpga   = new float[g_size];
+  //float *PtM1_fpga = new float[g_size];
+  //float *PtP1_fpga = new float[g_size];
+  float *A         = new float[g_niter];
   get_amplitude(A, g_niter);
 
   // init array
   for (int i = 0; i < g_size; i++) {
-    //Pt[i] = Pt_fpga[i] = (float)rand() / 100000;
-    //PtM1[i] = PtM1_fpga[i] = (float)rand() / 100000;
-    Pt[i] = Pt_fpga[i] = 0;
-    PtM1[i] = PtM1_fpga[i] = 0;
+    //Pt_array[1][i] = Pt_fpga_array[1][i] = 0;
+    //Pt_array[0][i] = Pt_fpga_array[0][i] = 0;
+    Pt_array[1][i] = Pt_fpga_array[1][i] = (float)rand() / 1000000;
+    Pt_array[0][i] = Pt_fpga_array[0][i] = (float)rand() / 1000000;
   }
 
   cout << "Streaming data to/from FPGA." << endl;
@@ -62,40 +67,29 @@ int main(int argc, char* argv[])
   max_upload_runtime_params(device, FPGA_A);
 
   cout << "Begin to execute function: max_run" << endl;
-  size_t n_bytes = g_size * sizeof *Pt;
-  for (int i = 0; i < g_niter; i++) {
-    cout << i + 1 << "st run" << endl;
+  size_t n_bytes = g_size * sizeof(float);
+  float *hello = new float[g_size];
+  for (int i = 2; i < g_niter + 2; i++) {
+    cout << i - 1 << "st run" << endl;
 
     max_run(device,
-        max_input("Pt_stream", Pt_fpga, n_bytes),
-        max_input("PtM1_stream", PtM1_fpga, n_bytes),
-        max_output("PtP1_stream", PtP1_fpga, n_bytes),
+        max_input("Pt_stream", Pt_fpga_array[i-1], n_bytes),
+        max_input("PtM1_stream", Pt_fpga_array[i-2], n_bytes),
+        max_output("PtP1_stream", Pt_fpga_array[i], n_bytes),
         max_runfor("PassThroughKernel", g_size),
         max_end());
 
-    acoustic(Pt, PtM1, PtP1);
+    acoustic(Pt_array[i-1], Pt_array[i-2], Pt_array[i]);
 
-    PtP1[at(0, g_ny/2, g_nx/2, g_ny, g_nx)]      += A[i];
-    PtP1_fpga[at(0, g_ny/2, g_nx/2, g_ny, g_nx)] += A[i];
-
-    // swap the pointers of host
-    float *tmp = PtM1;
-    PtM1       = Pt;
-    Pt         = PtP1;
-    PtP1       = tmp;
-
-    // swap the pointers of fpga
-    tmp       = PtM1_fpga;
-    PtM1_fpga = Pt_fpga;
-    Pt_fpga   = PtP1_fpga;
-    PtP1_fpga = tmp;
+    Pt_array[i][at(0, g_ny/2, g_nx/2, g_ny, g_nx)]      += A[i-2];
+    Pt_fpga_array[i][at(0, g_ny/2, g_nx/2, g_ny, g_nx)] += A[i-2];
 
     printf("Checking data read from FPGA.\n");
     float epsilon = 1e-23;
     for(int j = 0; j < g_size; j++) {
-      if ((abs(PtP1[j] - PtP1_fpga[j])) / abs(PtP1[j]) > epsilon) {
+      if ((abs(Pt_array[i][j] - Pt_fpga_array[i][j])) / abs(Pt_array[i][j]) > epsilon) {
         status = 1;
-        printf("%10d%20f%20f\n", j, PtP1[j], PtP1_fpga[j]);
+        printf("%10d%20f%20f\n", j, Pt_array[i][j], Pt_fpga_array[i][j]);
         //break;
       }
     }
