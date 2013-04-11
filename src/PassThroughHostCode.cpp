@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <cstdlib>
 #include <cmath>
@@ -11,6 +12,7 @@
 
 using namespace std;
 void get_amplitude(float *A, int n);
+bool passVerify(float *a, float *b, size_t size);
 
 int main(int argc, char* argv[])
 {
@@ -69,37 +71,28 @@ int main(int argc, char* argv[])
   cout << "Begin to execute function: max_run" << endl;
   size_t n_bytes = g_size * sizeof(float);
   float *hello = new float[g_size];
-  for (int i = 2; i < g_niter + 2; i++) {
+  for (int i = 1; i < g_niter + 1; i++) {
     cout << i - 1 << "st run" << endl;
 
     max_run(device,
-        max_input("Pt_stream", Pt_fpga_array[i-1], n_bytes),
-        max_input("PtM1_stream", Pt_fpga_array[i-2], n_bytes),
-        max_output("PtP1_stream", Pt_fpga_array[i], n_bytes),
+        max_input("Pt_stream", Pt_fpga_array[i], n_bytes),
+        max_input("PtM1_stream", Pt_fpga_array[i-1], n_bytes),
+        max_output("PtP1_stream", Pt_fpga_array[i+1], n_bytes),
         max_runfor("PassThroughKernel", g_size),
         max_end());
 
-    acoustic(Pt_array[i-1], Pt_array[i-2], Pt_array[i]);
+    acoustic(Pt_array[i], Pt_array[i-1], Pt_array[i+1]);
 
-    Pt_array[i][at(0, g_ny/2, g_nx/2, g_ny, g_nx)]      += A[i-2];
-    Pt_fpga_array[i][at(0, g_ny/2, g_nx/2, g_ny, g_nx)] += A[i-2];
+    Pt_array[i][at(0, g_ny/2, g_nx/2, g_ny, g_nx)]      += A[i-1];
+    Pt_fpga_array[i][at(0, g_ny/2, g_nx/2, g_ny, g_nx)] += A[i-1];
 
     printf("Checking data read from FPGA.\n");
-    float epsilon = 1e-23;
-    for(int j = 0; j < g_size; j++) {
-      if ((abs(Pt_array[i][j] - Pt_fpga_array[i][j])) / abs(Pt_array[i][j]) > epsilon) {
-        status = 1;
-        printf("%10d%20f%20f\n", j, Pt_array[i][j], Pt_fpga_array[i][j]);
-        //break;
-      }
-    }
-
-    if (status)
+    if (passVerify(Pt_array[i+1], Pt_fpga_array[i+1], g_size))
       cout <<"Test failed." << endl;
     else
       cout << "Test passed OK!" << endl;
 
-    cout << "end " << i + 1 << "st run" << endl;
+    cout << endl;
   }
 
 
@@ -131,4 +124,19 @@ void get_amplitude(float *A, int n)
   }
 
   ifs.close();
+}
+
+bool passVerify(float *a, float *b, size_t size)
+{
+  bool ret = true;
+  const float epsilon = 1e-23;
+
+  for(int i = 0; i < size; i++) {
+    if (abs((a[i] - b[i]) / a[i]) > epsilon) {
+      ret = false;
+      cout << setw(10) << i << setw(20) << a[i] << setw(20) << b[i] << endl;
+    }
+  }
+
+  return ret;
 }
