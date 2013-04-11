@@ -13,10 +13,10 @@
 using namespace std;
 void get_amplitude(float *A, int n);
 bool passVerify(float *a, float *b, size_t size);
-void allocArray(float **Pt_array, float **Pt_fpga_array, size_t n_array, size_t n_elem);
-void deleteArray(float **Pt_array, float **Pt_fpga_array, size_t size);
+void allocArray(float **Pt_array, float **Pt_fpga_array, float **receivers, float **receivers_fpga, size_t nt, size_t n_elem);
+void deleteArray(float **Pt_array, float **Pt_fpga_array, float **receivers, float **receivers_fpga, size_t size);
 void stream2FPGA(max_device_handle_t *device);
-void runAndCheck(max_device_handle_t *device, float **Pt_array, float **Pt_fpga_array, float *A, size_t size, int n_iter);
+void runAndCheck(max_device_handle_t *device, float **Pt_array, float **Pt_fpga_array, float *source, float **receivers, float **receivers_fpga, size_t size, int n_iter);
 void initFPGA(max_maxfile_t **maxfile, max_device_handle_t **device, const char *device_name);
 
 int main(int argc, char* argv[])
@@ -24,27 +24,29 @@ int main(int argc, char* argv[])
   char *device_name = (argc==2 ? argv[1] : NULL);
   max_maxfile_t       *maxfile;
   max_device_handle_t *device;
-  float               *Pt_array[g_niter + 2];
-  float               *Pt_fpga_array[g_niter + 2];
-  float                A[g_niter];
+  float               *Pt_array[g_nt + 2];
+  float               *Pt_fpga_array[g_nt + 2];
+  float               source[g_nt];
+  float               *receivers[g_nx *g_ny];
+  float               *receivers_fpga[g_ny * g_ny];
 
   cout << "Opening and configuring FPGA." << endl;
   initFPGA(&maxfile, &device, device_name);
 
-  allocArray(Pt_array, Pt_fpga_array, g_niter + 2, g_size);
-  get_amplitude(A, g_niter);
+  allocArray(Pt_array, Pt_fpga_array, receivers, receivers_fpga, g_nt + 2, g_size);
+  get_amplitude(source, g_nt);
 
   cout << "Streaming data to/from FPGA." << endl;
   stream2FPGA(device);
 
   cout << "Begin to execute function: max_run" << endl;
-  runAndCheck(device, Pt_array, Pt_fpga_array, A, g_size, g_niter);
+  runAndCheck(device, Pt_array, Pt_fpga_array, source, receivers, receivers_fpga, g_size, g_nt);
 
   cout << "Shutting down" << endl;
   max_close_device(device);
   max_destroy(maxfile);
 
-  deleteArray(Pt_array, Pt_fpga_array, g_niter + 2);
+  deleteArray(Pt_array, Pt_fpga_array, receivers, receivers_fpga, g_nt + 2);
   return 0;
 }
 
@@ -86,8 +88,16 @@ bool passVerify(float *a, float *b, size_t size)
 }
 
 void allocArray(float **Pt_array, float **Pt_fpga_array,
-               size_t n_array, size_t n_elem)
+                float **receivers, float **receivers_fpga, 
+                size_t nt, size_t n_elem)
 {
+  size_t n_array = nt + 2;
+
+  for (size_t i = 0; i < g_nx * g_ny; i++) {
+    receivers[i] = new float[nt];
+    receivers_fpga[i] = new float[nt];
+  }
+
   for (size_t i = 0; i < n_array; i++) {
     Pt_array[i]      = new float[n_elem];
     Pt_fpga_array[i] = new float[n_elem];
@@ -99,8 +109,14 @@ void allocArray(float **Pt_array, float **Pt_fpga_array,
   }
 }
 
-void deleteArray(float **Pt_array, float **Pt_fpga_array, size_t size)
+void deleteArray(float **Pt_array, float **Pt_fpga_array, 
+                 float **receivers, float **receivers_fpga,
+                 size_t size)
 {
+  for (size_t i = 0; i < g_nx * g_ny; i++) {
+    delete [] receivers[i];
+    delete [] receivers_fpga[i];
+  }
   for (size_t i = 0; i < size; i++) {
     delete [] Pt_array[i];
     delete [] Pt_fpga_array[i];
@@ -125,8 +141,11 @@ void stream2FPGA(max_device_handle_t *device)
   max_upload_runtime_params(device, FPGA_A);
 }
 
-void runAndCheck(max_device_handle_t *device, float **Pt_array, 
-                 float **Pt_fpga_array, float *A, size_t size, int n_iter)
+void runAndCheck(max_device_handle_t *device, 
+                 float **Pt_array, float **Pt_fpga_array, 
+                 float *source, 
+                 float **receivers, float **receivers_fpga,
+                 size_t size, int n_iter)
 {
   size_t n_bytes = size * sizeof(float);
   for (int i = 1; i < n_iter + 1; i++) {
@@ -143,8 +162,15 @@ void runAndCheck(max_device_handle_t *device, float **Pt_array,
     // run with CPU
     acoustic(Pt_array[i], Pt_array[i-1], Pt_array[i+1]);
 
-    Pt_array[i][at(0, g_ny/2, g_nx/2, g_ny, g_nx)]      += A[i-1];
-    Pt_fpga_array[i][at(0, g_ny/2, g_nx/2, g_ny, g_nx)] += A[i-1];
+    // add source injection
+    Pt_array[i][at(0, g_ny/2, g_nx/2, g_ny, g_nx)]      += source[i-1];
+    Pt_fpga_array[i][at(0, g_ny/2, g_nx/2, g_ny, g_nx)] += source[i-1];
+
+    // record receivers 
+    for (size_t irecv = 0; irecv < g_nx * g_ny; irecv++) {
+      receivers[irecv][i-1] = Pt_array[i+1][irecv];
+      receivers_fpga[irecv][i-1] = Pt_fpga_array[i+1][irecv];
+    }
 
     cout << (passVerify(Pt_array[i+1], Pt_fpga_array[i+1], size) ? 
              "OK. Test passed" : "!!!Test Failed!!!")
