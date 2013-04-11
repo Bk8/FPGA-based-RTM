@@ -65,8 +65,8 @@ CXX								?= g++
 # include path, remember to add -I
 INCLUDE_PATH += 
 LDFLAGS+=$(MAXCOMPILER_LIBS)
-CFLAGS+=$(MAXCOMPILER_INC) $(INCLUDE_PATH) -std=gnu99 -g
-CXXFLAGS+=$(MAXCOMPILER_INC) $(INCLUDE_PATH) 
+CFLAGS+=$(MAXCOMPILER_INC) $(INCLUDE_PATH) -std=gnu99 -g -Wall
+CXXFLAGS+=$(MAXCOMPILER_INC) $(INCLUDE_PATH) -Wall
 
 # Build in the current directory if MAXCOMPILER_BUILD_DIR is not set
 ifndef MAXCOMPILER_BUILD_DIR
