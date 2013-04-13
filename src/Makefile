@@ -172,7 +172,7 @@ clean-maxfiles:
 $(APP)FPGA.o:
 	$(MAXFILECOMPILE) "$(BUILD_RESULTS)/$(HWMAXFILE)" "$@" "$(APP)"
 
-$(basename $(HOSTCODE)).o: $(HOSTCODE)
+$(basename $(HOSTCODE)).o: $(HOSTCODE) $(CPP_OBJS) $(C_OBJS)
 ifeq ($(shell echo $(HOSTCODE) | sed 's/.*\.//g'), c)
 	$(CC) $(HOSTCODE) $(CFLAGS)  -DSIM -DDESIGN_NAME=$(APP) -c -o $(basename $(HOSTCODE)).o
 else

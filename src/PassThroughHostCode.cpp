@@ -26,20 +26,62 @@ void forwardMigrationOnFPGA(max_device_handle_t *device, float **Pt_fpga_array, 
 void reverseMigrationOnCPU( float **Pt_array, float **receivers, float *image, size_t size, int n_iter);
 void reverseMigrationOnFPGA( max_device_handle_t *device, float **Pt_fpga_array, float **receivers_fpga, float *image_fpga, size_t size, int n_iter);
 
+
+/* we cannot put them in the main function, because the stack will overflow */
+float               **Pt_array;
+float               *Pt_fpga_array[g_nt + 2];
+float               source[g_nt];
+float               *receivers[g_nx *g_ny];
+float               *receivers_fpga[g_ny * g_ny];
+float               image[g_size] = {0};
+float               image_fpga[g_size] = {0};
+
+void allocArray(float **Pt_array, float **Pt_fpga_array,
+                float **receivers, float **receivers_fpga,
+                size_t nt, size_t n_elem)
+{
+
+  size_t n_array = nt + 2;
+
+  for (size_t i = 0; i < g_nx * g_ny; i++) {
+    receivers[i] = new float[nt];
+    receivers_fpga[i] = new float[nt];
+  }
+
+  for (size_t i = 0; i < n_array; i++) {
+    Pt_array[i]      = new float[n_elem];
+    Pt_fpga_array[i] = new float[n_elem];
+  }
+
+  for (size_t i = 0; i < n_elem; i++) {
+    Pt_array[1][i] = Pt_fpga_array[1][i] = (float)rand() / 1000000;
+    Pt_array[0][i] = Pt_fpga_array[0][i] = (float)rand() / 1000000;
+  }
+}
+
+void deleteArray(float **Pt_array, float **Pt_fpga_array,
+                 float **receivers, float **receivers_fpga,
+                 size_t size)
+{
+  for (size_t i = 0; i < g_nx * g_ny; i++) {
+    delete [] receivers[i];
+    delete [] receivers_fpga[i];
+  }
+
+  for (size_t i = 0; i < size; i++) {
+    delete [] Pt_array[i];
+    delete [] Pt_fpga_array[i];
+  }
+}
 int main(int argc, char* argv[])
 {
   char *device_name = (argc==2 ? argv[1] : NULL);
   max_maxfile_t       *maxfile;
   max_device_handle_t *device;
-  float               *Pt_array[g_nt + 2];
-  float               *Pt_fpga_array[g_nt + 2];
-  float               source[g_nt];
-  float               *receivers[g_nx *g_ny];
-  float               *receivers_fpga[g_ny * g_ny];
-  float               image[g_size] = {0};
-  float               image_fpga[g_size] = {0};
   SysTime             sysTime;
 
+
+  Pt_array = new float* [g_nt + 2];
   cout << "Opening and configuring FPGA." << endl;
   initFPGA(&maxfile, &device, device_name);
 
@@ -119,42 +161,6 @@ bool passVerify(float *a, float *b, size_t size)
   return ret;
 }
 
-void allocArray(float **Pt_array, float **Pt_fpga_array,
-                float **receivers, float **receivers_fpga,
-                size_t nt, size_t n_elem)
-{
-  size_t n_array = nt + 2;
-
-  for (size_t i = 0; i < g_nx * g_ny; i++) {
-    receivers[i] = new float[nt];
-    receivers_fpga[i] = new float[nt];
-  }
-
-  for (size_t i = 0; i < n_array; i++) {
-    Pt_array[i]      = new float[n_elem];
-    Pt_fpga_array[i] = new float[n_elem];
-  }
-
-  for (size_t i = 0; i < n_elem; i++) {
-    Pt_array[1][i] = Pt_fpga_array[1][i] = (float)rand() / 1000000;
-    Pt_array[0][i] = Pt_fpga_array[0][i] = (float)rand() / 1000000;
-  }
-}
-
-void deleteArray(float **Pt_array, float **Pt_fpga_array,
-                 float **receivers, float **receivers_fpga,
-                 size_t size)
-{
-  for (size_t i = 0; i < g_nx * g_ny; i++) {
-    delete [] receivers[i];
-    delete [] receivers_fpga[i];
-  }
-
-  for (size_t i = 0; i < size; i++) {
-    delete [] Pt_array[i];
-    delete [] Pt_fpga_array[i];
-  }
-}
 
 void stream2FPGA(max_device_handle_t *device)
 {
