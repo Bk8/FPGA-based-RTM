@@ -13,10 +13,25 @@
 #define DEBUG 0
 
 using namespace std;
+
+
+/* we cannot put them in the main function, because the stack will overflow */
+float **Pt_array;
+float **Pt_fpga_array;
+float *source;
+float **receivers;
+float **receivers_fpga;
+float *image;
+float *image_fpga;
+float *tmp_1;
+float *tmp_2;
+float *tmp_3;
+
+
+void allocArray();
+void deleteArray();
 void get_amplitude(float *A, int n);
 bool passVerify(float *a, float *b, size_t size);
-void allocArray(float **Pt_array, float **Pt_fpga_array, float **receivers, float **receivers_fpga, size_t nt, size_t n_elem);
-void deleteArray(float **Pt_array, float **Pt_fpga_array, float **receivers, float **receivers_fpga, size_t size);
 void stream2FPGA(max_device_handle_t *device);
 void forwardMigrationAndCheck(max_device_handle_t *device, float **Pt_array, float **Pt_fpga_array, float *source, float **receivers, float **receivers_fpga, size_t size, int n_iter);
 void reverseMigrationAndCheck(max_device_handle_t *device, float **Pt_array, float **Pt_fpga_array, float **receivers, float **receivers_fpga, float *image, float *image_fpga, size_t size, int n_iter);
@@ -26,53 +41,66 @@ void forwardMigrationOnFPGA(max_device_handle_t *device, float **Pt_fpga_array, 
 void reverseMigrationOnCPU( float **Pt_array, float **receivers, float *image, size_t size, int n_iter);
 void reverseMigrationOnFPGA( max_device_handle_t *device, float **Pt_fpga_array, float **receivers_fpga, float *image_fpga, size_t size, int n_iter);
 
-
-/* we cannot put them in the main function, because the stack will overflow */
-float               **Pt_array;
-float               *Pt_fpga_array[g_nt + 2];
-float               source[g_nt];
-float               *receivers[g_nx *g_ny];
-float               *receivers_fpga[g_ny * g_ny];
-float               image[g_size] = {0};
-float               image_fpga[g_size] = {0};
-
-void allocArray(float **Pt_array, float **Pt_fpga_array,
-                float **receivers, float **receivers_fpga,
-                size_t nt, size_t n_elem)
+void allocArray()
 {
+  size_t n_array = g_nt + 2;
+  Pt_array       = new float* [n_array];
+  Pt_fpga_array  = new float* [n_array];
+  source         = new float[g_nt];
+  receivers      = new float* [g_nx * g_ny];
+  receivers_fpga = new float* [g_nx * g_ny];
+  image          = new float[g_size];
+  image_fpga     = new float[g_size];
+  tmp_1 = new float[g_size];
+  tmp_2 = new float[g_size];
+  tmp_3 = new float[g_size];
 
-  size_t n_array = nt + 2;
-
-  for (size_t i = 0; i < g_nx * g_ny; i++) {
-    receivers[i] = new float[nt];
-    receivers_fpga[i] = new float[nt];
-  }
+  memset(image, 0, g_size * sizeof *image);
+  memset(image_fpga, 0, g_size * sizeof *image_fpga);
 
   for (size_t i = 0; i < n_array; i++) {
-    Pt_array[i]      = new float[n_elem];
-    Pt_fpga_array[i] = new float[n_elem];
+    Pt_array[i]      = new float[g_size];
+    Pt_fpga_array[i] = new float[g_size];
   }
 
-  for (size_t i = 0; i < n_elem; i++) {
+  for (size_t i = 0; i < g_nx * g_ny; i++) {
+    receivers[i] = new float[g_nt];
+    receivers_fpga[i] = new float[g_nt];
+  }
+
+
+  for (int i = 0; i < g_size; i++) {
     Pt_array[1][i] = Pt_fpga_array[1][i] = (float)rand() / 1000000;
     Pt_array[0][i] = Pt_fpga_array[0][i] = (float)rand() / 1000000;
   }
 }
 
-void deleteArray(float **Pt_array, float **Pt_fpga_array,
-                 float **receivers, float **receivers_fpga,
-                 size_t size)
+void deleteArray()
 {
+  size_t n_array = g_nt + 2;
+
   for (size_t i = 0; i < g_nx * g_ny; i++) {
     delete [] receivers[i];
     delete [] receivers_fpga[i];
   }
 
-  for (size_t i = 0; i < size; i++) {
+  for (size_t i = 0; i < n_array; i++) {
     delete [] Pt_array[i];
     delete [] Pt_fpga_array[i];
   }
+
+  delete [] Pt_array;
+  delete [] Pt_fpga_array;
+  delete [] source;
+  delete [] receivers;
+  delete [] receivers_fpga;
+  delete [] image;
+  delete [] image_fpga;
+  delete [] tmp_1;
+  delete [] tmp_2;
+  delete [] tmp_3;
 }
+
 int main(int argc, char* argv[])
 {
   char *device_name = (argc==2 ? argv[1] : NULL);
@@ -81,11 +109,10 @@ int main(int argc, char* argv[])
   SysTime             sysTime;
 
 
-  Pt_array = new float* [g_nt + 2];
   cout << "Opening and configuring FPGA." << endl;
   initFPGA(&maxfile, &device, device_name);
 
-  allocArray(Pt_array, Pt_fpga_array, receivers, receivers_fpga, g_nt, g_size);
+  allocArray();
   get_amplitude(source, g_nt);
 
   cout << "Streaming data to/from FPGA." << endl;
@@ -120,7 +147,7 @@ int main(int argc, char* argv[])
   max_close_device(device);
   max_destroy(maxfile);
 
-  deleteArray(Pt_array, Pt_fpga_array, receivers, receivers_fpga, g_nt + 2);
+  deleteArray();
   return 0;
 }
 
@@ -332,10 +359,12 @@ void reverseMigrationOnCPU(
   size_t   size,
   int      n_iter)
 {
-  float Pt[g_size]        = {0};
-  float PtM1[g_size]      = {0};
-  float PtP1[g_size]      = {0};
+  float *Pt = tmp_1;
+  float *PtM1 = tmp_2;
+  float *PtP1 = tmp_3;
 
+  memset(PtP1, 0, g_size * sizeof *PtP1);
+  memset(Pt, 0, g_size * sizeof *Pt);
   for (int i = n_iter; i >= 1; i--) {
 #if DEBUG == 1
     cout << i - 1 << "st reverse migration on CPU" << endl;
@@ -356,6 +385,7 @@ void reverseMigrationOnCPU(
       image[j] += Pt_array[i-1][j] * PtM1[j];
     }
   }
+
 }
 
 void reverseMigrationOnFPGA(
@@ -366,9 +396,12 @@ void reverseMigrationOnFPGA(
   size_t                size,
   int                   n_iter)
 {
-  float Pt_fpga[g_size]   = {0};
-  float PtM1_fpga[g_size] = {0};
-  float PtP1_fpga[g_size] = {0};
+  float *Pt_fpga = tmp_1;
+  float *PtM1_fpga = tmp_2;
+  float *PtP1_fpga = tmp_3;
+
+  memset(Pt_fpga, 0, g_size * sizeof *Pt_fpga);
+  memset(PtP1_fpga, 0, g_size * sizeof *PtP1_fpga);
 
   size_t n_bytes = size * sizeof(float);
   for (int i = n_iter; i >= 1; i--) {
@@ -397,4 +430,5 @@ void reverseMigrationOnFPGA(
     }
 
   }
+
 }

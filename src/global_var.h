@@ -8,7 +8,7 @@ extern float g_dt;
 extern float g_tmp[];
 extern const char *g_rw_fname;
 
-const int dimension = 96;
+const int dimension = 256;
 const int g_nx = dimension;
 const int g_ny = dimension;
 const int g_nz = dimension;

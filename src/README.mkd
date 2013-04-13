@@ -47,3 +47,13 @@ where
 - stencil is the stencil operation for volume `P_t`
 - the meaning of other parameters is describe in the upper directory
   README.
+
+TO-DO
+===
+- store the parameters in a config files, such as the input.dat in HPL, 
+   which is easy to modified without re-compiling the program.
+
+- pass the parameters through the command using the Linux commandline 
+   parameters handling, such as getopts
+
+- optimize the fpga kernel with different technique.
