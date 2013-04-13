@@ -10,8 +10,9 @@
 #include "stencil.h"
 #include "sysTime.h"
 
+#define DEBUG 0
+
 using namespace std;
-void runAndCheck(max_device_handle_t *device, float **Pt_array, float **Pt_fpga_array, float *source, float **receivers, float **receivers_fpga, size_t size, int n_iter);
 void get_amplitude(float *A, int n);
 bool passVerify(float *a, float *b, size_t size);
 void allocArray(float **Pt_array, float **Pt_fpga_array, float **receivers, float **receivers_fpga, size_t nt, size_t n_elem);
@@ -20,6 +21,10 @@ void stream2FPGA(max_device_handle_t *device);
 void forwardMigrationAndCheck(max_device_handle_t *device, float **Pt_array, float **Pt_fpga_array, float *source, float **receivers, float **receivers_fpga, size_t size, int n_iter);
 void reverseMigrationAndCheck(max_device_handle_t *device, float **Pt_array, float **Pt_fpga_array, float **receivers, float **receivers_fpga, float *image, float *image_fpga, size_t size, int n_iter);
 void initFPGA(max_maxfile_t **maxfile, max_device_handle_t **device, const char *device_name);
+void forwardMigrationOnCPU(float **Pt_array, float *source, float **receivers, size_t size, int n_iter);
+void forwardMigrationOnFPGA(max_device_handle_t *device, float **Pt_fpga_array, float *source, float **receivers_fpga, size_t size, int n_iter);
+void reverseMigrationOnCPU( float **Pt_array, float **receivers, float *image, size_t size, int n_iter);
+void reverseMigrationOnFPGA( max_device_handle_t *device, float **Pt_fpga_array, float **receivers_fpga, float *image_fpga, size_t size, int n_iter);
 
 int main(int argc, char* argv[])
 {
@@ -33,6 +38,7 @@ int main(int argc, char* argv[])
   float               *receivers_fpga[g_ny * g_ny];
   float               image[g_size] = {0};
   float               image_fpga[g_size] = {0};
+  SysTime             sysTime;
 
   cout << "Opening and configuring FPGA." << endl;
   initFPGA(&maxfile, &device, device_name);
@@ -43,14 +49,30 @@ int main(int argc, char* argv[])
   cout << "Streaming data to/from FPGA." << endl;
   stream2FPGA(device);
 
-  cout << "Begin to execute function: max_run" << endl;
-  forwardMigrationAndCheck(device, Pt_array, Pt_fpga_array, source, receivers, receivers_fpga, g_size, g_nt);
+  cout << "\nRunning Parameters: " << endl;
+  cout << "# of shots: " << g_ns << endl;
+  cout << "# of iterations: " << g_nt << endl;
+  cout << "Cude size: (" << g_nz << ", " << g_ny << ", " << g_nx << ")\n" << endl;
 
-  cout << "Begin to Reverse Migration" << endl;
-  reverseMigrationAndCheck(device, Pt_array, Pt_fpga_array, 
-                           receivers, receivers_fpga,
-                           image, image_fpga,
-                           g_size, g_nt);
+  sysTime.start();
+  for (int i = 0; i < g_ns; i++) {
+    forwardMigrationOnCPU(Pt_array, source, receivers, g_size, g_nt);
+    reverseMigrationOnCPU(Pt_array, receivers, image, g_size, g_nt);
+  }
+  cout << "Time used on CPU:  "  << sysTime.stop() << " ms" << endl;
+
+  sysTime.start();
+  for (int i = 0; i < g_ns; i++) {
+    forwardMigrationOnFPGA(device, Pt_fpga_array, source, receivers_fpga, g_size, g_nt);
+    reverseMigrationOnFPGA(device, Pt_fpga_array, receivers_fpga, image_fpga, g_size, g_nt);
+  }
+  cout << "Time used on FPGA: "  << sysTime.stop() << " ms" << endl;
+
+  if (passVerify(image, image_fpga, g_size)) {
+    cout << endl << "Test passed" << endl;
+  } else {
+    cout << "Test failed" << endl;
+  }
 
   cout << "Shutting down" << endl;
   max_close_device(device);
@@ -98,7 +120,7 @@ bool passVerify(float *a, float *b, size_t size)
 }
 
 void allocArray(float **Pt_array, float **Pt_fpga_array,
-                float **receivers, float **receivers_fpga, 
+                float **receivers, float **receivers_fpga,
                 size_t nt, size_t n_elem)
 {
   size_t n_array = nt + 2;
@@ -119,7 +141,7 @@ void allocArray(float **Pt_array, float **Pt_fpga_array,
   }
 }
 
-void deleteArray(float **Pt_array, float **Pt_fpga_array, 
+void deleteArray(float **Pt_array, float **Pt_fpga_array,
                  float **receivers, float **receivers_fpga,
                  size_t size)
 {
@@ -152,9 +174,9 @@ void stream2FPGA(max_device_handle_t *device)
   max_upload_runtime_params(device, FPGA_A);
 }
 
-void forwardMigrationAndCheck(max_device_handle_t *device, 
-                 float **Pt_array, float **Pt_fpga_array, 
-                 float *source, 
+void forwardMigrationAndCheck(max_device_handle_t *device,
+                 float **Pt_array, float **Pt_fpga_array,
+                 float *source,
                  float **receivers, float **receivers_fpga,
                  size_t size, int n_iter)
 {
@@ -177,20 +199,20 @@ void forwardMigrationAndCheck(max_device_handle_t *device,
     Pt_array[i+1][at(0, g_ny/2, g_nx/2, g_ny, g_nx)]      += source[i-1];
     Pt_fpga_array[i+1][at(0, g_ny/2, g_nx/2, g_ny, g_nx)] += source[i-1];
 
-    // record receivers 
+    // record receivers
     for (size_t irecv = 0; irecv < g_nx * g_ny; irecv++) {
       receivers[irecv][i-1] = Pt_array[i+1][irecv];
       receivers_fpga[irecv][i-1] = Pt_fpga_array[i+1][irecv];
     }
 
-    cout << (passVerify(Pt_array[i+1], Pt_fpga_array[i+1], size) ? 
+    cout << (passVerify(Pt_array[i+1], Pt_fpga_array[i+1], size) ?
              "OK. Test passed" : "!!!Test Failed!!!")
          << endl << endl;
   }
 }
 
-void reverseMigrationAndCheck(max_device_handle_t *device, 
-                 float **Pt_array, float **Pt_fpga_array, 
+void reverseMigrationAndCheck(max_device_handle_t *device,
+                 float **Pt_array, float **Pt_fpga_array,
                  float **receivers, float **receivers_fpga,
                  float *image, float *image_fpga,
                  size_t size, int n_iter)
@@ -231,15 +253,142 @@ void reverseMigrationAndCheck(max_device_handle_t *device,
       image_fpga[j] += Pt_fpga_array[i-1][j] * PtM1_fpga[j];
     }
 
-    cout << (passVerify(Pt_array[i-1], Pt_fpga_array[i-1], size) ? 
+    cout << (passVerify(Pt_array[i-1], Pt_fpga_array[i-1], size) ?
              "OK. Test passed" : "!!!Test Failed!!!")
          << endl << endl;
   }
 }
-void initFPGA(max_maxfile_t **maxfile, max_device_handle_t **device, 
+void initFPGA(max_maxfile_t **maxfile, max_device_handle_t **device,
               const char *device_name)
 {
   *maxfile = max_maxfile_init_PassThrough();
   *device = max_open_device(*maxfile, device_name);
   max_set_terminate_on_error(*device);
+}
+
+void forwardMigrationOnCPU(float **Pt_array, float *source,
+                           float **receivers, size_t size,
+                           int n_iter)
+{
+  for (int i = 1; i < n_iter + 1; i++) {
+#if DEBUG > 0
+    cout << i - 1 << "st forward migration on CPU" << endl;
+#endif
+    // run with CPU
+    acoustic(Pt_array[i], Pt_array[i-1], Pt_array[i+1]);
+
+    // add source injection
+    Pt_array[i+1][at(0, g_ny/2, g_nx/2, g_ny, g_nx)]      += source[i-1];
+
+    // record receivers
+    for (size_t irecv = 0; irecv < g_nx * g_ny; irecv++) {
+      receivers[irecv][i-1] = Pt_array[i+1][irecv];
+    }
+
+  }
+}
+
+
+void forwardMigrationOnFPGA(max_device_handle_t *device,
+                 float **Pt_fpga_array,
+                 float *source,
+                 float **receivers_fpga,
+                 size_t size, int n_iter)
+{
+  size_t n_bytes = size * sizeof(float);
+  for (int i = 1; i < n_iter + 1; i++) {
+#if DEBUG > 0
+    cout << i - 1 << "st forward migration on FPGA" << endl;
+#endif
+    // run with FPGA
+    max_run(device,
+        max_input("Pt_stream", Pt_fpga_array[i], n_bytes),
+        max_input("PtM1_stream", Pt_fpga_array[i-1], n_bytes),
+        max_output("PtP1_stream", Pt_fpga_array[i+1], n_bytes),
+        max_runfor("PassThroughKernel", size),
+        max_end());
+
+    // add source injection
+    Pt_fpga_array[i+1][at(0, g_ny/2, g_nx/2, g_ny, g_nx)] += source[i-1];
+
+    // record receivers
+    for (size_t irecv = 0; irecv < g_nx * g_ny; irecv++) {
+      receivers_fpga[irecv][i-1] = Pt_fpga_array[i+1][irecv];
+    }
+
+  }
+}
+
+void reverseMigrationOnCPU(
+  float  **Pt_array,
+  float  **receivers,
+  float   *image,
+  size_t   size,
+  int      n_iter)
+{
+  float Pt[g_size]        = {0};
+  float PtM1[g_size]      = {0};
+  float PtP1[g_size]      = {0};
+
+  for (int i = n_iter; i >= 1; i--) {
+#if DEBUG == 1
+    cout << i - 1 << "st reverse migration on CPU" << endl;
+#endif
+
+    // run with CPU
+    acoustic(Pt, PtP1, PtM1);
+
+    // add receivers injection
+    // where you collect the receivers's wave then
+    // where you add the injection
+    for (size_t irecv = 0; irecv < g_nx * g_ny; irecv++) {
+      PtM1[irecv]      += receivers[irecv][i];
+    }
+
+    // generate the image
+    for (int j = 0; j < g_size; j++) {
+      image[j] += Pt_array[i-1][j] * PtM1[j];
+    }
+  }
+}
+
+void reverseMigrationOnFPGA(
+  max_device_handle_t  *device,
+  float               **Pt_fpga_array,
+  float               **receivers_fpga,
+  float                *image_fpga,
+  size_t                size,
+  int                   n_iter)
+{
+  float Pt_fpga[g_size]   = {0};
+  float PtM1_fpga[g_size] = {0};
+  float PtP1_fpga[g_size] = {0};
+
+  size_t n_bytes = size * sizeof(float);
+  for (int i = n_iter; i >= 1; i--) {
+#if DEBUG == 1
+    cout << i - 1 << "st reverse migration on FPGA" << endl;
+#endif
+
+    // run with FPGA
+    max_run(device,
+        max_input("Pt_stream", Pt_fpga, n_bytes),
+        max_input("PtM1_stream", PtP1_fpga, n_bytes),
+        max_output("PtP1_stream", PtM1_fpga, n_bytes),
+        max_runfor("PassThroughKernel", size),
+        max_end());
+
+    // add receivers injection
+    // where you collect the receivers's wave then
+    // where you add the injection
+    for (size_t irecv = 0; irecv < g_nx * g_ny; irecv++) {
+      PtM1_fpga[irecv] += receivers_fpga[irecv][i];
+    }
+
+    // generate the image
+    for (int j = 0; j < g_size; j++) {
+      image_fpga[j] += Pt_fpga_array[i-1][j] * PtM1_fpga[j];
+    }
+
+  }
 }

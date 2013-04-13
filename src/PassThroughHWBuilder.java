@@ -4,7 +4,7 @@ import com.maxeler.maxcompiler.v1.managers.standard.Manager;
 import com.maxeler.maxcompiler.v1.managers.standard.Manager.IOType;
 
 public class PassThroughHWBuilder {
-	  private static final int nxMax = 512;
+	  private static final int nxMax = 416;
 
 	public static void main(String[] args) {
 		Manager m = new Manager("PassThrough", MAX3BoardModel.MAX3424A);

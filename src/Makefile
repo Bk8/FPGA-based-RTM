@@ -56,7 +56,7 @@ C_SOURCES 				:=
 C_OBJS          	:= $(patsubst %.c, %.o, $(C_SOURCES))
 
 # cpp sources, separated by space
-CPP_SOURCES       := auxiliary.cpp global_var.cpp 
+CPP_SOURCES       := auxiliary.cpp global_var.cpp sysTime.cpp
 CPP_OBJS          := $(patsubst %.cpp, %.o, $(CPP_SOURCES))
 
 CC								?= gcc
@@ -174,9 +174,9 @@ $(APP)FPGA.o:
 
 $(basename $(HOSTCODE)).o: $(HOSTCODE)
 ifeq ($(shell echo $(HOSTCODE) | sed 's/.*\.//g'), c)
-	$(CC) $(HOSTCODE) $(CFLAGS)  -DSIM -DDESIGN_NAME=$(APP) -c -o $(basename $(HOSTCODE))Sim.o
+	$(CC) $(HOSTCODE) $(CFLAGS)  -DSIM -DDESIGN_NAME=$(APP) -c -o $(basename $(HOSTCODE)).o
 else
-	$(CXX) $(HOSTCODE) $(CXXFLAGS)  -DSIM -DDESIGN_NAME=$(APP) -c -o $(basename $(HOSTCODE))Sim.o
+	$(CXX) $(HOSTCODE) $(CXXFLAGS)  -DSIM -DDESIGN_NAME=$(APP) -c -o $(basename $(HOSTCODE)).o
 endif
 
 $(APP)Run: $(basename $(HOSTCODE)).o $(APP)FPGA.o $(OTHER_OBJECTS) $(CPP_OBJS) $(C_OBJS)
